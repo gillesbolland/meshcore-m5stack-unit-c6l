@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MeshCore M5Stack Unit C6L</title>
+  <style>
+    :root {
+      --bg: #0b1214;
+      --panel: #122024;
+      --text: #e8f4f2;
+      --muted: #8aa8a4;
+      --accent: #00e8e0;
+      --border: #1e3a3c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    a { color: var(--accent); }
+    header {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 1rem;
+    }
+    header img.hero {
+      width: 100%;
+      max-width: 420px;
+      display: block;
+      margin: 0 auto 1.25rem;
+      border-radius: 8px;
+    }
+    h1 { font-size: 1.75rem; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
+    .lead { color: var(--muted); font-size: 1.05rem; }
+    main { max-width: 880px; margin: 0 auto; padding: 0 1.25rem 3rem; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.35rem;
+      margin: 1rem 0;
+    }
+    h2 { margin-top: 0; font-size: 1.2rem; color: var(--accent); }
+    pre, code {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 0.85rem;
+    }
+    pre {
+      background: #071012;
+      border: 1px solid var(--border);
+      padding: 0.9rem 1rem;
+      overflow-x: auto;
+      border-radius: 8px;
+    }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+    }
+    .gallery figure { margin: 0; text-align: center; }
+    .gallery img {
+      width: 100%;
+      image-rendering: pixelated;
+      background: #0a2a2e;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .gallery figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 0.4rem; }
+    .note {
+      border-left: 3px solid var(--accent);
+      padding-left: 0.85rem;
+      color: var(--muted);
+    }
+    footer { max-width: 880px; margin: 0 auto; padding: 0 1.25rem 2.5rem; color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <img class="hero" src="assets/unit-c6l-hero.png" alt="M5Stack Unit C6L showing MESHCORE on the OLED" />
+    <h1>MeshCore for M5Stack Unit C6L</h1>
+    <p class="lead">Out-of-tree overlay + prebuilt firmware for the Unit C6L (ESP32-C6 + SX1262). MeshCore itself stays upstream — this repo only ships the board port, OLED UX, patches, and flash helpers.</p>
+  </header>
+  <main>
+    <section id="what">
+      <h2>What this is</h2>
+      <p>A <strong>hybrid companion</strong> firmware for the <a href="https://docs.m5stack.com/en/unit/Unit_C6L">M5Stack Unit C6L</a>: one image with <strong>BLE + USB + WiFi</strong> (pick Mode on the OLED), built on <a href="https://github.com/meshcore-dev/MeshCore">MeshCore</a> (MIT).</p>
+      <p>Pinned MeshCore tag: <strong><code>companion-v1.17.1</code></strong> (see <code>COMPAT.json</code>). Newer MeshCore may break patches. Other MeshCore roles (repeater, room server, …) are <strong>not</strong> shipped here.</p>
+    </section>
+
+    <section id="ux">
+      <h2>OLED UX (illustrative)</h2>
+      <p class="note">The hardware panel is a monochrome SPI SSD1306. These mockups use the product photo’s aqua-on-teal look for documentation only.</p>
+      <div class="gallery">
+        <figure><img src="assets/ux/menu.png" alt="Menu" /><figcaption>Menu</figcaption></figure>
+        <figure><img src="assets/ux/messages.png" alt="Messages" /><figcaption>Messages</figcaption></figure>
+        <figure><img src="assets/ux/status.png" alt="Status" /><figcaption>Status</figcaption></figure>
+        <figure><img src="assets/ux/settings.png" alt="Settings" /><figcaption>Settings</figcaption></figure>
+        <figure><img src="assets/ux/mode.png" alt="Mode" /><figcaption>First-boot Mode</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="how">
+      <h2>How it was done / what was used</h2>
+      <ul>
+        <li>PlatformIO + MeshCore ESP32-C6 base</li>
+        <li>Variant under <code>overlay/variants/m5stack_unit_c6l/</code> (PI4IO expander, OLED UI modules)</li>
+        <li>SPI <code>SSD1306SPIDisplay</code> (Adafruit SSD1306 + GFX)</li>
+        <li>Small <code>patches/</code> for companion hooks (MyMesh favourites/factory, MultiSerial WiFi/USB Mode, NeoPixel USB traffic, <code>esp_mac.h</code>)</li>
+        <li><strong>Not</strong> used: M5Unified, Meshtastic graphics stacks</li>
+      </ul>
+    </section>
+
+    <section id="why">
+      <h2>Why MeshCore is not in this git history</h2>
+      <p>This keeps board-specific / AI-assisted overlay work separate from MeshCore’s upstream tree. You clone MeshCore at the pinned tag; the setup script overlays files and applies patches. That avoids vendoring a full fork and makes it clearer when a new MeshCore release needs patch updates.</p>
+    </section>
+
+    <section id="flash-script">
+      <h2>Flash with the script (easiest)</h2>
+      <pre>git clone &lt;this-repository-url&gt;
+cd meshcore-m5stack-unit-c6l
+./scripts/flash.sh</pre>
+      <p>Menu: <strong>Update</strong> (app @ <code>0x10000</code>), <strong>Full</strong> (erase + merged @ <code>0x0</code>), <strong>Erase only</strong>. If <code>esptool</code> is missing, the script prints the install command (<code>brew</code> / <code>apt</code> / <code>pipx</code>) — it does not auto-install with sudo.</p>
+      <p>Download mode: hold Unit C6L <strong>Reset</strong> ~3s. Use a USB <em>data</em> cable.</p>
+    </section>
+
+    <section id="flash-manual">
+      <h2>Flash manually (esptool)</h2>
+      <p>Always pass: <code>--chip esp32c6 --flash-mode dio --flash-freq 80m --flash-size 4MB</code>. If the device boot-loops after an app-only update, use the <strong>merged</strong> image at <code>0x0</code>.</p>
+      <pre># Erase
+esptool --chip esp32c6 -p PORT erase-flash
+
+# Full install (merged)
+esptool --chip esp32c6 -p PORT write-flash \
+  --flash-mode dio --flash-freq 80m --flash-size 4MB \
+  0x0 firmware/m5stack_unit_c6l_companion-v1.17.1-merged.bin
+
+# App-only update
+esptool --chip esp32c6 -p PORT write-flash \
+  --flash-mode dio --flash-freq 80m --flash-size 4MB \
+  0x10000 firmware/m5stack_unit_c6l_companion-v1.17.1.bin</pre>
+      <p>Replace <code>PORT</code> (e.g. <code>/dev/cu.usbmodem1101</code>).</p>
+    </section>
+
+    <section id="wifi">
+      <h2>WiFi configuration</h2>
+      <p class="note">The published prebuilt has WiFi Mode UI but <strong>no SSID baked in</strong> (<code>WIFI_SSID</code> is not set at compile time). Without rebuilding, WiFi Mode shows <code>no SSID</code> / not connected.</p>
+      <ol>
+        <li>Rebuild with credentials. Example PlatformIO flags (or <code>platformio.local.ini</code> / M5Burner build flags):
+          <pre>-D WIFI_SSID='"YourNetwork"'
+-D WIFI_PWD='"YourPassword"'
+; optional: -D TCP_PORT=5000</pre>
+          Add them under the companion env in <code>overlay/variants/m5stack_unit_c6l/platformio.ini</code>, then run <code>./scripts/setup-and-build.sh</code>.
+        </li>
+        <li>Flash the new companion image (<code>./scripts/flash.sh</code>).</li>
+        <li>On device: <strong>Settings → Interfaces → Mode → WiFi</strong> (reboots).</li>
+        <li>Open <strong>Settings → Interfaces → WiFi</strong> for <code>IP:port</code> (default TCP <strong>5000</strong>).</li>
+        <li>Connect a MeshCore companion app over TCP to that address.</li>
+        <li>Optional: <strong>USB Debug</strong> keeps USB/CDC while Mode is BLE or WiFi.</li>
+      </ol>
+    </section>
+
+    <section id="build">
+      <h2>Rebuild from source</h2>
+      <pre>./scripts/setup-and-build.sh</pre>
+      <p>Needs <code>git</code>, <code>python3</code>, and PlatformIO (<code>pio</code>). Missing tools → printed install hints. Clones MeshCore at the pin into <code>.build/MeshCore</code>, rsyncs the variant, applies patches, builds the hybrid companion into <code>firmware/</code>.</p>
+    </section>
+
+    <section id="maintain">
+      <h2>Maintenance &amp; community</h2>
+      <p>I am <strong>not</strong> committing to heavy ongoing maintenance. There is no guaranteed roadmap or response time.</p>
+      <p><strong>Forks are welcome.</strong> Pull requests and people who want to continue or take over development are welcome.</p>
+    </section>
+  </main>
+  <footer>
+    Overlay code: MIT (this repository). MeshCore: MIT — © MeshCore contributors —
+    <a href="https://github.com/meshcore-dev/MeshCore">meshcore-dev/MeshCore</a>.
+    Hardware docs: <a href="https://docs.m5stack.com/en/unit/Unit_C6L">M5 Unit C6L</a>.
+  </footer>
+</body>
+</html>

@@ -1,0 +1,94 @@
+--- a/examples/companion_radio/main.cpp
++++ b/examples/companion_radio/main.cpp
+@@ -32,7 +32,7 @@
+ #endif
+ 
+ // include wifi interface
+-#ifdef WIFI_SSID
++#if defined(WIFI_SSID) || defined(ENABLE_WIFI_INTERFACE)
+   #ifndef TCP_PORT
+     #define TCP_PORT 5000
+   #endif
+@@ -108,7 +108,7 @@
+ }
+ 
+ /* WIFI RECONNECT TRACKERS */
+-#if defined(ESP32) && defined(WIFI_SSID)
++#if defined(ESP32) && (defined(WIFI_SSID) || defined(ENABLE_WIFI_INTERFACE))
+   bool wifi_needs_reconnect = false;
+   unsigned long last_wifi_reconnect_attempt = 0;
+ #endif
+@@ -121,6 +121,12 @@
+   external_watchdog.begin();
+ #endif
+ 
++  // Radio (and shared SPI) before OLED — C6L OLED shares LoRa SPI; talking to the
++  // panel before std_init leaves the SX1262 in a bad state (radio init -2).
++  if (!radio_init()) { halt(); }
++
++  fast_rng.begin(radio_driver.getRngSeed());
++
+ #ifdef DISPLAY_CLASS
+   DisplayDriver* disp = NULL;
+   if (display.begin()) {
+@@ -134,10 +140,6 @@
+   }
+ #endif
+ 
+-  if (!radio_init()) { halt(); }
+-
+-  fast_rng.begin(radio_driver.getRngSeed());
+-
+ #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
+   InternalFS.begin();
+   #if defined(QSPIFLASH)
+@@ -191,10 +193,15 @@
+ #endif
+ 
+ // add wifi interface
+-#ifdef WIFI_SSID
+-  board.setInhibitSleep(true);   // prevent sleep when WiFi is active
++#if defined(WIFI_SSID) || defined(ENABLE_WIFI_INTERFACE)
++  interface_manager.addInterface(InterfaceType::WiFi, &wifi_interface);
++  wifi_interface.disable();
++  // Do not call wifi_interface.begin() yet — WiFiServer::begin() asserts if the
++  // WiFi driver is not up. UITask starts the TCP server when Mode = WiFi.
++  #ifdef WIFI_SSID
++  board.setInhibitSleep(true);
++  WiFi.mode(WIFI_STA);
+   WiFi.setAutoReconnect(true);
+-
+   WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info){
+       if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+           WIFI_DEBUG_PRINTLN("WiFi disconnected. Flagging for reconnect...");
+@@ -204,10 +211,10 @@
+           wifi_needs_reconnect = false;
+       }
+   });
+-
+   WiFi.begin(WIFI_SSID, WIFI_PWD);
+   wifi_interface.begin(TCP_PORT);
+-  interface_manager.addInterface(InterfaceType::WiFi, &wifi_interface);
++  wifi_interface.enable();
++  #endif
+ #endif
+ 
+ // add usb interface
+@@ -238,7 +245,7 @@
+ #endif
+ 
+ #ifdef DISPLAY_CLASS
+-  ui_task.begin(disp, &sensors, the_mesh.getNodePrefs());  // still want to pass this in as dependency, as prefs might be moved
++  ui_task.begin(disp, &sensors, the_mesh.getNodePrefs());
+ #endif
+ 
+   board.onBootComplete();
+@@ -262,7 +269,7 @@
+ #endif
+   }
+ 
+-#if defined(ESP32) && defined(WIFI_SSID)
++#if defined(ESP32) && (defined(WIFI_SSID) || defined(ENABLE_WIFI_INTERFACE))
+   // Safely attempt to reconnect every 10 seconds if flagged
+   if (wifi_needs_reconnect && (millis() - last_wifi_reconnect_attempt > 10000)) {
+     WIFI_DEBUG_PRINTLN("Attempting manual WiFi reconnect...");

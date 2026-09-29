@@ -1,0 +1,41 @@
+--- a/src/helpers/MultiSerialInterface.h
++++ b/src/helpers/MultiSerialInterface.h
+@@ -90,6 +90,38 @@
+     return false; 
+   }
+ 
++  void enableWifi() {
++    for(auto iface : _interfaces){
++      if(iface.instance && iface.type == InterfaceType::WiFi){
++        iface.instance->enable();
++      }
++    }
++  }
++
++  void disableWifi() {
++    for(auto iface : _interfaces){
++      if(iface.instance && iface.type == InterfaceType::WiFi){
++        iface.instance->disable();
++      }
++    }
++  }
++
++  void enableUsb() {
++    for(auto iface : _interfaces){
++      if(iface.instance && iface.type == InterfaceType::USB){
++        iface.instance->enable();
++      }
++    }
++  }
++
++  void disableUsb() {
++    for(auto iface : _interfaces){
++      if(iface.instance && iface.type == InterfaceType::USB){
++        iface.instance->disable();
++      }
++    }
++  }
++
+   // enable all interfaces
+   void enable() override {
+     _enabled = true;

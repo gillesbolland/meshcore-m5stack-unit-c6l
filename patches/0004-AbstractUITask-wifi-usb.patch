@@ -1,0 +1,13 @@
+--- a/examples/companion_radio/AbstractUITask.h
++++ b/examples/companion_radio/AbstractUITask.h
+@@ -39,6 +39,10 @@
+   bool isBluetoothEnabled() const { return _interfaceManager->isBluetoothEnabled(); }
+   void enableBluetooth() { _interfaceManager->enableBluetooth(); }
+   void disableBluetooth() { _interfaceManager->disableBluetooth(); }
++  void enableWifi() { _interfaceManager->enableWifi(); }
++  void disableWifi() { _interfaceManager->disableWifi(); }
++  void enableUsb() { _interfaceManager->enableUsb(); }
++  void disableUsb() { _interfaceManager->disableUsb(); }
+   virtual void msgRead(int msgcount) = 0;
+   virtual void newMsg(uint8_t path_len, const char* from_name, const char* text, int msgcount) = 0;
+   virtual void notify(UIEventType t = UIEventType::none) = 0;

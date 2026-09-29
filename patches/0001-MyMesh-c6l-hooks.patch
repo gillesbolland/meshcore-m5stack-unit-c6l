@@ -1,0 +1,151 @@
+--- a/examples/companion_radio/MyMesh.h
++++ b/examples/companion_radio/MyMesh.h
+@@ -76,12 +76,16 @@
+ #define REQ_TYPE_KEEP_ALIVE             0x02
+ #define REQ_TYPE_GET_TELEMETRY_DATA     0x03
+ 
++#define ADVERT_PATH_TABLE_SIZE   16
++
+ struct AdvertPath {
+   uint8_t pubkey_prefix[7];
+   uint8_t path_len;
+   char    name[32];
+   uint32_t recv_timestamp;
+   uint8_t path[MAX_PATH_SIZE];
++  uint8_t type;                       // C6L: ADV_TYPE_* (for UI filters)
++  uint8_t pub_key[PUB_KEY_SIZE];      // C6L: full key so device UI can add contact
+ };
+ 
+ class MyMesh : public BaseChatMesh, public DataStoreHost {
+@@ -98,6 +102,16 @@
+   void loop();
+   void handleCmdFrame(size_t len);
+   bool advert();
++  /** C6L: Add companion (ADV_TYPE_CHAT) from recently-heard table. Returns 0=fail, 1=added, 2=already known. */
++  int  addContactFromRecent(const uint8_t* pub_key);
++  /** C6L: Toggle favourite bit (flags LSB); persists via dirty timer. */
++  bool setContactFavorite(const uint8_t* pub_key, bool favorite);
++  /** C6L: Remove contact + blob (same as CMD_REMOVE_CONTACT). */
++  bool removeContactUi(const uint8_t* pub_key);
++  /** C6L: Delete all non-favourite contacts. Returns count removed. */
++  int  eraseNonFavoriteContacts();
++  /** C6L: Wipe FS + NVS (same as CMD_FACTORY_RESET). Caller must reboot; boot creates a new identity. */
++  bool factoryReset();
+   void enterCLIRescue();
+ 
+   int  getRecentlyHeard(AdvertPath dest[], int max_num);
+@@ -254,7 +268,6 @@
+   AckTableEntry expected_ack_table[EXPECTED_ACK_TABLE_SIZE]; // circular table
+   int next_ack_idx;
+ 
+-  #define ADVERT_PATH_TABLE_SIZE   16
+   AdvertPath advert_paths[ADVERT_PATH_TABLE_SIZE]; // circular table
+ };
+ 
+--- a/examples/companion_radio/MyMesh.cpp
++++ b/examples/companion_radio/MyMesh.cpp
+@@ -381,6 +381,8 @@
+     }
+ 
+     memcpy(p->pubkey_prefix, contact.id.pub_key, sizeof(p->pubkey_prefix));
++    memcpy(p->pub_key, contact.id.pub_key, PUB_KEY_SIZE);  // C6L: full key for OLED add-contact
++    p->type = contact.type;                                 // C6L: ADV_TYPE_* for UI filters
+     strcpy(p->name, contact.name);
+     p->recv_timestamp = getRTCClock()->getCurrentTime();
+     p->path_len = mesh::Packet::copyPath(p->path, path, path_len);
+@@ -2261,6 +2263,95 @@
+   }
+ }
+ 
++int MyMesh::addContactFromRecent(const uint8_t* pub_key) {
++  // C6L: OLED Advert long-press → add ADV_TYPE_CHAT from recently-heard
++  if (!pub_key) return 0;
++
++  ContactInfo* existing = lookupContactByPubKey(pub_key, PUB_KEY_SIZE);
++  if (existing) {
++    if (existing->type != ADV_TYPE_CHAT) return 0;
++    existing->lastmod = getRTCClock()->getCurrentTime();
++    dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
++    return 2;  // already known
++  }
++
++  AdvertPath* found = NULL;
++  for (int i = 0; i < ADVERT_PATH_TABLE_SIZE; i++) {
++    if (advert_paths[i].recv_timestamp == 0) continue;
++    if (advert_paths[i].type != ADV_TYPE_CHAT) continue;
++    if (memcmp(advert_paths[i].pub_key, pub_key, PUB_KEY_SIZE) == 0) {
++      found = &advert_paths[i];
++      break;
++    }
++  }
++  if (!found) return 0;
++
++  ContactInfo contact;
++  memset(&contact, 0, sizeof(contact));
++  memcpy(contact.id.pub_key, found->pub_key, PUB_KEY_SIZE);
++  StrHelper::strncpy(contact.name, found->name, sizeof(contact.name));
++  contact.type = ADV_TYPE_CHAT;
++  contact.out_path_len = OUT_PATH_UNKNOWN;
++  if (mesh::Packet::isValidPathLen(found->path_len)) {
++    contact.out_path_len = mesh::Packet::copyPath(contact.out_path, found->path, found->path_len);
++  }
++  contact.lastmod = getRTCClock()->getCurrentTime();
++  contact.last_advert_timestamp = found->recv_timestamp;
++  contact.shared_secret_valid = false;
++
++  if (!addContact(contact)) return 0;
++  dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
++  return 1;  // newly added
++}
++
++bool MyMesh::setContactFavorite(const uint8_t* pub_key, bool favorite) {
++  if (!pub_key) return false;
++  ContactInfo* c = lookupContactByPubKey(pub_key, PUB_KEY_SIZE);
++  if (!c) return false;
++  if (favorite) c->flags = (uint8_t)(c->flags | 0x01);
++  else c->flags = (uint8_t)(c->flags & ~0x01);
++  c->lastmod = getRTCClock()->getCurrentTime();
++  dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
++  return true;
++}
++
++bool MyMesh::removeContactUi(const uint8_t* pub_key) {
++  if (!pub_key) return false;
++  ContactInfo* c = lookupContactByPubKey(pub_key, PUB_KEY_SIZE);
++  if (!c) return false;
++  if (!removeContact(*c)) return false;
++  _store->deleteBlobByKey(pub_key, PUB_KEY_SIZE);
++  dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
++  return true;
++}
++
++int MyMesh::eraseNonFavoriteContacts() {
++  // Snapshot keys first — removeContact mutates the table
++  uint8_t keys[40][PUB_KEY_SIZE];  // bounded batch; loop until none left
++  int removed = 0;
++  for (;;) {
++    int n = 0;
++    ContactsIterator it = startContactsIterator();
++    ContactInfo c;
++    while (it.hasNext(this, c) && n < 40) {
++      if ((c.flags & 0x01) == 0) {
++        memcpy(keys[n], c.id.pub_key, PUB_KEY_SIZE);
++        n++;
++      }
++    }
++    if (n == 0) break;
++    for (int i = 0; i < n; i++) {
++      if (removeContactUi(keys[i])) removed++;
++    }
++  }
++  return removed;
++}
++
++bool MyMesh::factoryReset() {
++  // C6L: same wipe as CMD_FACTORY_RESET — SPIFFS + NVS; reboot creates new identity
++  return _store->formatFileSystem();
++}
++
+ // To check if there is pending work
+ bool MyMesh::hasPendingWork() const {
+   return _mgr->getOutboundTotal() > 0 || dirty_contacts_expiry != 0;

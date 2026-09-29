@@ -1,0 +1,95 @@
+--- a/src/MeshCore.h
++++ b/src/MeshCore.h
+@@ -51,6 +51,10 @@
+   virtual const char* getManufacturerName() const = 0;
+   virtual void onBeforeTransmit() { }
+   virtual void onAfterTransmit() { }
++  /** Called after a LoRa packet is successfully read (length > 0). */
++  virtual void onAfterReceive() { }
++  /** Poll RX LED timeout, etc.; called from radio loop. */
++  virtual void serviceTrafficLed() { }
+   virtual void reboot() = 0;
+   virtual void powerOff() { /* no op */ }
+   // Called by example setup() functions to signal that boot is complete.
+--- a/src/helpers/ESP32Board.h
++++ b/src/helpers/ESP32Board.h
+@@ -21,6 +21,10 @@
+   uint8_t startup_reason;
+   bool inhibit_sleep = false;
+   static inline portMUX_TYPE sleepMux = portMUX_INITIALIZER_UNLOCKED;
++#if defined(P_LORA_TX_NEOPIXEL_LED) && defined(NEOPIXEL_USB_TRAFFIC)
++  bool _neo_tx_active = false;
++  uint32_t _neo_rx_until = 0;
++#endif
+ 
+ public:
+   void begin() {
+@@ -120,14 +124,48 @@
+     digitalWrite(P_LORA_TX_LED, LOW);   // turn TX LED off
+   }
+ #elif defined(P_LORA_TX_NEOPIXEL_LED)
++#if !defined(NEOPIXEL_USB_TRAFFIC)
+   #define NEOPIXEL_BRIGHTNESS    64  // white brightness (max 255)
+ 
+   void onBeforeTransmit() override {
+-    neopixelWrite(P_LORA_TX_NEOPIXEL_LED, NEOPIXEL_BRIGHTNESS, NEOPIXEL_BRIGHTNESS, NEOPIXEL_BRIGHTNESS);   // turn TX neopixel on (White)
++    neopixelWrite(P_LORA_TX_NEOPIXEL_LED, NEOPIXEL_BRIGHTNESS, NEOPIXEL_BRIGHTNESS, NEOPIXEL_BRIGHTNESS);
++  }
++  void onAfterTransmit() override {
++    neopixelWrite(P_LORA_TX_NEOPIXEL_LED, 0, 0, 0);
++  }
++#else
++  // USB-oriented roles: green = TX, red = short RX pulse (see NEOPIXEL_USB_TRAFFIC in platformio)
++  static const uint8_t NEO_USB_TX_G = 55;
++  static const uint8_t NEO_USB_RX_R = 55;
++  static const uint32_t NEO_USB_RX_MS = 45;
++
++  void onBeforeTransmit() override {
++    _neo_tx_active = true;
++    neopixelWrite(P_LORA_TX_NEOPIXEL_LED, 0, NEO_USB_TX_G, 0);
+   }
+   void onAfterTransmit() override {
+-    neopixelWrite(P_LORA_TX_NEOPIXEL_LED, 0, 0, 0);   // turn TX neopixel off
++    _neo_tx_active = false;
++    if (millis() < _neo_rx_until) {
++      neopixelWrite(P_LORA_TX_NEOPIXEL_LED, NEO_USB_RX_R, 0, 0);
++    } else {
++      neopixelWrite(P_LORA_TX_NEOPIXEL_LED, 0, 0, 0);
++    }
++  }
++  void onAfterReceive() override {
++    _neo_rx_until = millis() + NEO_USB_RX_MS;
++    if (!_neo_tx_active) {
++      neopixelWrite(P_LORA_TX_NEOPIXEL_LED, NEO_USB_RX_R, 0, 0);
++    }
+   }
++  void serviceTrafficLed() override {
++    if (_neo_tx_active) return;
++    if (millis() < _neo_rx_until) {
++      neopixelWrite(P_LORA_TX_NEOPIXEL_LED, NEO_USB_RX_R, 0, 0);
++    } else {
++      neopixelWrite(P_LORA_TX_NEOPIXEL_LED, 0, 0, 0);
++    }
++  }
++#endif
+ #endif
+ 
+   uint16_t getBattMilliVolts() override {
+--- a/src/helpers/radiolib/RadioLibWrappers.cpp
++++ b/src/helpers/radiolib/RadioLibWrappers.cpp
+@@ -104,6 +104,7 @@
+     MESH_DEBUG_PRINTLN("RadioLibWrapper: noise_floor = %d", (int)_noise_floor);
+     #endif
+   }
++  _board->serviceTrafficLed();
+ }
+ 
+ void RadioLibWrapper::startRecv() {
+@@ -136,6 +137,7 @@
+       } else {
+       //  Serial.print("  readData() -> "); Serial.println(len);
+         n_recv++;
++        _board->onAfterReceive();
+       }
+     }
+     #if defined(USE_LR2021)
