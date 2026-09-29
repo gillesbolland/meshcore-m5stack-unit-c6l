@@ -36,6 +36,15 @@
     }
     h1 { font-size: 1.75rem; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
     .lead { color: var(--muted); font-size: 1.05rem; }
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1.1rem;
+      margin: 1rem 0 0;
+      font-size: 0.95rem;
+    }
+    nav.toc a { text-decoration: none; }
+    nav.toc a:hover { text-decoration: underline; }
     main { max-width: 880px; margin: 0 auto; padding: 0 1.25rem 3rem; }
     section {
       background: var(--panel);
@@ -45,6 +54,8 @@
       margin: 1rem 0;
     }
     h2 { margin-top: 0; font-size: 1.2rem; color: var(--accent); }
+    h3 { font-size: 1rem; margin: 1.1rem 0 0.4rem; color: var(--text); }
+    ul.compact li { margin: 0.25rem 0; }
     pre, code {
       font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
       font-size: 0.85rem;
@@ -60,6 +71,7 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 1rem;
+      margin-top: 1rem;
     }
     .gallery figure { margin: 0; text-align: center; }
     .gallery img {
@@ -83,17 +95,46 @@
     <img class="hero" src="assets/unit-c6l-hero.png" alt="M5Stack Unit C6L showing MESHCORE on the OLED" />
     <h1>MeshCore for M5Stack Unit C6L</h1>
     <p class="lead">Out-of-tree overlay + prebuilt firmware for the Unit C6L (ESP32-C6 + SX1262). MeshCore itself stays upstream — this repo only ships the board port, OLED UX, patches, and flash helpers.</p>
+    <nav class="toc" aria-label="On this page">
+      <a href="#ux">UX</a>
+      <a href="#prereqs">Prerequisites</a>
+      <a href="#releases">Releases</a>
+      <a href="#flash-script">Flash</a>
+      <a href="#wifi">WiFi</a>
+      <a href="#build">Build</a>
+    </nav>
   </header>
   <main>
     <section id="what">
       <h2>What this is</h2>
       <p>A <strong>hybrid companion</strong> firmware for the <a href="https://docs.m5stack.com/en/unit/Unit_C6L">M5Stack Unit C6L</a>: one image with <strong>BLE + USB + WiFi</strong> (pick Mode on the OLED), built on <a href="https://github.com/meshcore-dev/MeshCore">MeshCore</a> (MIT).</p>
       <p>Pinned MeshCore tag: <strong><code>companion-v1.17.1</code></strong> (see <code>COMPAT.json</code>). Newer MeshCore may break patches. Other MeshCore roles (repeater, room server, …) are <strong>not</strong> shipped here.</p>
+      <p class="note">As far as we know, this is the first companion OLED UX for the Unit C6L on MeshCore.</p>
     </section>
 
     <section id="ux">
-      <h2>OLED UX (illustrative)</h2>
-      <p class="note">The hardware panel is a monochrome SPI SSD1306. These mockups use the product photo’s aqua-on-teal look for documentation only.</p>
+      <h2>OLED UX</h2>
+      <p class="note">The hardware panel is a monochrome SPI SSD1306 (64×48). Mockups below use the product photo’s aqua-on-teal look for documentation only.</p>
+
+      <h3>First boot</h3>
+      <p>Gesture help → radio preset → Mode (default <strong>USB</strong>) → quiet local advert → reboot → Menu.</p>
+
+      <h3>Button</h3>
+      <ul class="compact">
+        <li><strong>Short press</strong> — next item</li>
+        <li><strong>Double-click</strong> — select / enter</li>
+        <li><strong>Long-hold</strong> — go back (progress over ~1&nbsp;s; release early cancels)</li>
+        <li><strong>Triple-click</strong> — stealth</li>
+      </ul>
+      <p>Screen blanks after ~30&nbsp;s; a click while asleep wakes only.</p>
+
+      <h3>Screens</h3>
+      <p>Messages · Contacts · Nodes · Status · Settings.</p>
+      <ul class="compact">
+        <li><strong>Settings</strong>: LoRa · Interfaces · Path hash · Local advert · Factory reset</li>
+        <li><strong>Interfaces</strong>: Mode (BLE/USB/WiFi) · BLE PIN · WiFi status · USB Debug</li>
+      </ul>
+
       <div class="gallery">
         <figure><img src="assets/ux/menu.png" alt="Menu" /><figcaption>Menu</figcaption></figure>
         <figure><img src="assets/ux/messages.png" alt="Messages" /><figcaption>Messages</figcaption></figure>
@@ -119,12 +160,33 @@
       <p>This keeps board-specific / AI-assisted overlay work separate from MeshCore’s upstream tree. You clone MeshCore at the pinned tag; the setup script overlays files and applies patches. That avoids vendoring a full fork and makes it clearer when a new MeshCore release needs patch updates.</p>
     </section>
 
+    <section id="prereqs">
+      <h2>Prerequisites</h2>
+      <ul class="compact">
+        <li><code>git</code></li>
+        <li><code>esptool</code> (if missing, <code>./scripts/flash.sh</code> prints <code>brew</code> / <code>apt</code> / <code>pipx</code> install hints; it does not auto-sudo install)</li>
+        <li>USB <em>data</em> cable</li>
+        <li>Unit C6L download mode: hold <strong>Reset</strong> ~3&nbsp;s</li>
+        <li>Rebuild only: <code>python3</code> + PlatformIO (<code>pio</code>)</li>
+      </ul>
+    </section>
+
+    <section id="releases">
+      <h2>Downloads / Releases</h2>
+      <p>Prebuilt companion images for <code>companion-v1.17.1</code>:</p>
+      <ul class="compact">
+        <li><code>m5stack_unit_c6l_companion-v1.17.1.bin</code> — app only @ <code>0x10000</code></li>
+        <li><code>m5stack_unit_c6l_companion-v1.17.1-merged.bin</code> — full image @ <code>0x0</code></li>
+      </ul>
+      <p><a href="https://github.com/gillesbolland/meshcore-m5stack-unit-c6l/releases/tag/v1.17.1">GitHub Release v1.17.1</a> (also checked into <code>firmware/</code> in this repo).</p>
+    </section>
+
     <section id="flash-script">
       <h2>Flash with the script (easiest)</h2>
-      <pre>git clone &lt;this-repository-url&gt;
+      <pre>git clone https://github.com/gillesbolland/meshcore-m5stack-unit-c6l.git
 cd meshcore-m5stack-unit-c6l
 ./scripts/flash.sh</pre>
-      <p>Menu: <strong>Update</strong> (app @ <code>0x10000</code>), <strong>Full</strong> (erase + merged @ <code>0x0</code>), <strong>Erase only</strong>. If <code>esptool</code> is missing, the script prints the install command (<code>brew</code> / <code>apt</code> / <code>pipx</code>) — it does not auto-install with sudo.</p>
+      <p>Menu: <strong>Update</strong> (app @ <code>0x10000</code>), <strong>Full</strong> (erase + merged @ <code>0x0</code>), <strong>Erase only</strong>.</p>
       <p>Download mode: hold Unit C6L <strong>Reset</strong> ~3s. Use a USB <em>data</em> cable.</p>
     </section>
 
