@@ -13,7 +13,7 @@ One firmware image: **BLE + USB + WiFi** (switch Mode on the OLED). This reposit
 ## Quick flash
 
 ```bash
-git clone <this-repository-url>
+git clone https://github.com/gillesbolland/meshcore-m5stack-unit-c6l
 cd meshcore-m5stack-unit-c6l
 ./scripts/flash.sh
 ```
